@@ -8,11 +8,11 @@
     <arg name="odometryTopic" default="/gps_odometry" />
     <arg name="gnssTopic" default="/nav/fix" />
     <arg name="imuTopic" default="/imu/enu" />
-    <arg name="poseTopic" default="/pose" />
+    <arg name="poseTopic" default="/ImuOut" />
     <arg name="useOdoemetryTopic" default="false" />
 
-    <arg name="lidarTopic1" default="/qml/sensor/vlp16/left/PointCloud2" />
-    <arg name="lidarTopic2" default="/qml/sensor/vlp16/right/PointCloud2" />
+    <arg name="lidarTopic1" default="/PandarOut" />
+    <arg name="lidarTopic2" default="/right" />
     <arg name="lidarCount" default="1" />
    
     <arg name="min_scan_range"  default="10.0" />
@@ -55,7 +55,7 @@
         <param name="poseTopic" type="str" value="$(arg poseTopic)" />
         <param name="useOdoemetryTopic" type="bool" value="$(arg useOdoemetryTopic)" />
 
-        <param name="lidarTopic1" type="str" value="$(arg lidarTopic2)" />
+        <param name="lidarTopic1" type="str" value="$(arg lidarTopic1)" />
         <param name="lidarTopic2" type="str" value="$(arg lidarTopic2)" />
         <param name="lidarCount" type="int" value="$(arg lidarCount)" />
         <param name="min_scan_range" type="double" value="$(arg min_scan_range)" />
@@ -71,7 +71,8 @@
         <param name="max_iter" type="double" value="$(arg max_iter)" />
 
         <!-- <rosparam param="initialTransGuess"> [1.53, 1.3125, -0.67, 0.0, -0.017, -0.02]</rosparam> -->
-        <rosparam param="initialTransGuess"> [1.60, -1.3125, -0.66, 0, 0, -0.02]</rosparam>
+        <!-- x y z roll pitch yaw -->
+        <rosparam param="initialTransGuess"> [0, 0, 0, 0, 0, 0]</rosparam>
     </node>
 
 

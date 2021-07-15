@@ -209,8 +209,10 @@ target_link_libraries(handeye_exporter_node
  )
 
 add_executable(pcl_viewer_node examples/PclViewer.cpp)
+find_package (PCL REQUIRED COMPONENTS common io visualization)
 target_link_libraries(pcl_viewer_node
    ${catkin_LIBRARIES}
+   ${PCL_VISUALIZATION_LIBRARIES}
 #   ${OpenCV_LIBRARIES}
  )
 

@@ -193,24 +193,31 @@ geometry_msgs::PoseStamped constructPoseStampedFromEigenMatrix(const Eigen::Matr
 void poseLidarCallback(const geometry_msgs::PoseStampedConstPtr& poseMsg, const sensor_msgs::PointCloud2ConstPtr &lidarMsg)
 {
     std::cout << "Pose lidar callback " << std::endl;
+    //current_pose是imu的pose
     ros::Time current_pose_time = poseMsg->header.stamp;
     ros::Time current_scan_time = lidarMsg->header.stamp;
-    double diff_time = current_pose_time.toSec() - current_scan_time.toSec();
+    double diff_time = current_pose_time.toSec() - current_scan_time.toSec();// 时间差
 
     const geometry_msgs::Quaternion& orien = poseMsg->pose.orientation;
     double orienTemp[4] = {orien.w, orien.x, orien.y, orien.z}; // scalar, i, j ,k
 
-    Eigen::Matrix3d rot = SensorCalibration::QuaternionToRotation(orienTemp);
+    Eigen::Matrix3d rot = SensorCalibration::QuaternionToRotation(orienTemp); //四元数转旋转矩阵
     // std::cout << "rot : \n" << rot <<std::endl;
     Eigen::Matrix4f trans = Eigen::Matrix4f::Identity();
     // trans.setZero();
     trans.block<3,3>(0,0) = rot.cast<float>();
     trans.block<3,1>(0,3) << poseMsg->pose.position.x,poseMsg->pose.position.y, poseMsg->pose.position.z;
     
+    // 以上完成了poseMsg的时间戳初始化和xyz
+    // trans矩阵是当前的imu的旋转平移矩阵
+
     ros::Time loop_begin = ros::Time::now();
     pcl::PointCloud<pcl::PointXYZI> pclMessage;
     pcl::PointCloud<pcl::PointXYZI> transformed_pclMessage;
-    pcl::fromROSMsg(*lidarMsg, pclMessage);
+    pcl::fromROSMsg(*lidarMsg, pclMessage); //转换到pcl，经典操作
+
+    // 都变成PointCloud类型了
+    // 下面雷达都变成了pclMessage了，要开始对pclMessage做操作了
 
     ros::Time bp1 = ros::Time::now();
     if(isFirstMessage)
@@ -224,8 +231,18 @@ void poseLidarCallback(const geometry_msgs::PoseStampedConstPtr& poseMsg, const 
         return;
     }
 
+    // 取第一次imu的数据作为参考坐标系叫做referenceOdometry
+    // trans是每一时刻imu相对于大地坐标系的旋转平移矩阵
+    // 这里的transPose感觉是lidar2到lidar1的变换
+    // 这里的transNewOrigin应该是imu1到imu2的变换,希望是根据车身坐标系的一个变换
+    // 考虑输入的应该是里程计的信息
+
     Eigen::Matrix4f transNewOrigin = referenceOdometry.inverse()*trans;
     transVecsOdometry.push_back(transNewOrigin);
+
+    // 这里的transPose只和你设置的initialTransformGuess相关
+    // publish出来给你看看你的预估差了多少
+
     Eigen::Matrix4d transPose = initialTransformGuess.inverse()* transNewOrigin.cast<double>() * initialTransformGuess;
     ros::Time bp2 = ros::Time::now();
 
@@ -251,6 +268,10 @@ void poseLidarCallback(const geometry_msgs::PoseStampedConstPtr& poseMsg, const 
 
     // current pc -> downsampled pc -> ndt
     // TODO
+    // If you want to construct pointcloud edit here
+    // 这里可以切换点云 虽然应该在驱动中指定正方向
+    // 我们都希望前面是正方向（这个很重要）
+
     pcl::PointCloud<pcl::PointXYZI> confinedCloud;
     pcl::PointXYZI p;
     for(pcl::PointCloud<pcl::PointXYZI>::const_iterator item = pclMessage.begin(); item!= pclMessage.end(); item++){
@@ -288,6 +309,7 @@ void poseLidarCallback(const geometry_msgs::PoseStampedConstPtr& poseMsg, const 
     pcl::PointCloud<pcl::PointXYZI>::Ptr previousCloudPtr(new pcl::PointCloud<pcl::PointXYZI>(previousPointCloud));
     pcl::PointCloud<pcl::PointXYZI>::Ptr currentCloudPtr(new pcl::PointCloud<pcl::PointXYZI>(currentCloudDownSampled));
 
+    // 匹配点云
     pointCloudTrackerSingle(previousCloudPtr, currentCloudPtr, transformation, initialGuess, mode);
     //assume planar motion, set z value always 0
     transformation(2,3) = 0.0;
@@ -358,6 +380,7 @@ void poseLidarCallback(const geometry_msgs::PoseStampedConstPtr& poseMsg, const 
     sourcePcPublisher.publish(sourcePclMsg);
 
     //sync_lidar poses 
+    // sync_t是什么意思?
     sync_pose.x = current_pose.x + diff_time/sync_t * diff_x;
     sync_pose.y = current_pose.y + diff_time/sync_t * diff_y;
     sync_pose.z = current_pose.z + diff_time/sync_t * diff_z;
@@ -373,6 +396,8 @@ void poseLidarCallback(const geometry_msgs::PoseStampedConstPtr& poseMsg, const 
     Eigen::Matrix4f sync_global_t = sync_local_t;
     transVecsLidar1.push_back(sync_global_t);
 
+    // 以上做了一个雷达估计位姿的操作
+
     // if(mode == "ndt"){
     //     absolutePose = transformation.cast<double>();
     // }
@@ -380,7 +405,14 @@ void poseLidarCallback(const geometry_msgs::PoseStampedConstPtr& poseMsg, const 
     //     absolutePose = absolutePose *transformation.cast<double>();
     // }
     //publish
+    //std::cout<<"transPose:"<<std::endl;
+    // 为什么要用transPose
+    std::cout << transPose <<std::endl;
+    // transPose和第一次的init值是一致的
     currentGpsPoseStampedMsg = constructPoseStampedFromEigenMatrix(transPose);
+    // absolutePose和算出来的ndt矩阵是一致的
+    // 我应该输出的是pclPoseStamped和我目前的车辆信息的这个posestampted的Path
+    // 这两个应该才是A和B（AX = XB）
     currentPclPoseStampedMsg = constructPoseStampedFromEigenMatrix(absolutePose);
     currentGpsPoseStampedMsg.header.frame_id = "/imu_link";
     currentPclPoseStampedMsg.header.frame_id = "/imu_link";
@@ -402,7 +434,7 @@ void poseLidarCallback(const geometry_msgs::PoseStampedConstPtr& poseMsg, const 
     // std::cout << "publish time: " << pub_end-pub_start << std::endl;
 }
 
-
+// 写入文件
 void serializeTransformationPairs(const std::vector<Eigen::Matrix4f>& transHand, const std::vector<Eigen::Matrix4f>& transEye, std::string& filePath)
 {
     boost::filesystem::path dir(filePath);
@@ -420,6 +452,8 @@ void serializeTransformationPairs(const std::vector<Eigen::Matrix4f>& transHand,
 
     if(fs.isOpened())
     {
+        ROS_WARN_STREAM("Handtrans size:"<<transHand.size());
+        ROS_WARN_STREAM("Eyetrans size:"<<transEye.size());
         fs << "HandOdometry" << "[";
         for(unsigned int i=0; i< transHand.size(); i++)
         {
@@ -723,17 +757,17 @@ int main(int argc, char** argv)
     nh.param("dataPath", dataPath, std::string(""));
 //    nh.param("timeSpan", timeSpan, 120.0f);
     nh.param("mode", mode, std::string("ndt"));
-    nh.param("odometryTopic", odometryTopic, std::string("/gps_odometry"));
-    nh.param("poseTopic", poseTopic, std::string("/pose"));
-    nh.param("gnssTopic", gnssTopic, std::string("/nav/fix"));
-    nh.param("imuTopic", imuTopic, std::string("/imu/enu"));
+    nh.param("odometryTopic", odometryTopic, std::string("/gps_odometry"));// not used
+    nh.param("poseTopic", poseTopic, std::string("/pose"));// used
+    nh.param("gnssTopic", gnssTopic, std::string("/nav/fix"));// not used
+    nh.param("imuTopic", imuTopic, std::string("/imu/enu"));//not used
     nh.param("useOdoemetryTopic", useOdoemetryTopic, false);
 
-    nh.param("lidarTopic1", lidarTopic1, std::string("/rr/front_left/velodyne_points"));
-    nh.param("lidarTopic2", lidarTopic2, std::string("/rr/front_right/velodyne_points"));
-    nh.param("lidarCount", lidarCount, 1);
-    nh.param<float>("min_scan_range", min_scan_range, min_scan_range);
-    nh.param<float>("max_scan_range", max_scan_range, max_scan_range);
+    nh.param("lidarTopic1", lidarTopic1, std::string("/left"));// used
+    nh.param("lidarTopic2", lidarTopic2, std::string("/right"));// not used
+    nh.param("lidarCount", lidarCount, 1);// not used
+    nh.param<float>("min_scan_range", min_scan_range, min_scan_range);//used
+    nh.param<float>("max_scan_range", max_scan_range, max_scan_range);//used
     nh.param<float>("min_add_scan_shift", min_add_scan_shift, min_add_scan_shift);
     nh.param<float>("voxel_leaf_size", voxel_leaf_size, voxel_leaf_size);
     nh.param<float>("ndt_resolution", ndt_resolution, ndt_resolution);
@@ -746,7 +780,7 @@ int main(int argc, char** argv)
 
     nh.param("initialTransGuess", initialTransGuess, initialTransGuess);
 
-    if(lidarCount<1 )
+    if(lidarCount < 1)
     {
         std::cout << "Please provide at lease 1 lidar topic" << std::endl;
         return -1;
@@ -775,6 +809,8 @@ int main(int argc, char** argv)
 
     initialTransformGuess.block<3,3>(0,0) = rotationMatrix;
     initialTransformGuess.block<3,1>(0,3) << initialTransGuess[0],initialTransGuess[1],initialTransGuess[2];
+    // (R t)
+    // (0 1) 4*4 矩阵
 
 
     ros::Subscriber odoSubTest;
@@ -784,8 +820,12 @@ int main(int argc, char** argv)
     message_filters::Subscriber<sensor_msgs::PointCloud2> lidarSub1(nh, lidarTopic1, 1000);
     typedef message_filters::sync_policies::ApproximateTime<geometry_msgs::PoseStamped, sensor_msgs::PointCloud2> syncPolicy;
     message_filters::Synchronizer<syncPolicy> sync(syncPolicy(1000), poseSub, lidarSub1);
-    sync.registerCallback(boost::bind(&poseLidarCallback, _1, _2));
 
+
+    // 本函数重点！！
+    sync.registerCallback(boost::bind(&poseLidarCallback, _1, _2));// poseLidarCallback执行
+
+    // 做一些登记 好在rviz里面显示
     gpsNavPathPublisher = nh.advertise<nav_msgs::Path>("/SensorCalibration/HandEye/gpsNavPath", 10);
     pclNavPathPublisher = nh.advertise<nav_msgs::Path>("/SensorCalibration/HandEye/pclNavPath", 10);
     gpsPoseStampedPublisher = nh.advertise<geometry_msgs::PoseStamped>("/SensorCalibration/HandEye/gpsPoseStamped", 10);
@@ -808,7 +848,14 @@ if(ros::isShuttingDown())
     std::cout << "----------------------Saving files----------------------" << std::endl;
     // std::vector<Eigen::Matrix4f> releativeTransforms = computeRelativeTransform(transVecsOdometry);
     // std::cout << "Obtained number of transforms: " << releativeTransforms.size() << std::endl;
-    serializeTransformationPairs(transVecsOdometry, transVecsLidar1, dataPath);
+
+    // transVecsOdometry是imu的变换
+    // transVecsLidar1是雷达的变换
+    // 那transPose只是给你看看你的初始预估值准不准
+
+    serializeTransformationPairs(transVecsOdometry, transVecsLidar1, dataPath);// 写入文件
+
+    // TODO: 看看这个文件怎么写入的和Example里面怎么用
     std::cout << "----------------------Files saved----------------------" << std::endl;
 }
 

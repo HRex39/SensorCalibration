@@ -55,7 +55,7 @@ Eigen::Vector3d eigenRotToEigenVector3dAngleAxis(Input eigenQuat)
     return ax3d.angle()*ax3d.axis();
 }
 
-struct EigenHypothesis
+struct EigenHypothesis //还做了一个重载 天才
 {
     Eigen::Matrix4d mHypothesis;
     double mScore;
@@ -159,6 +159,7 @@ Eigen::Matrix4d handEyeCalibrationWithRefinement(const std::vector<Eigen::Matrix
     return calibrationMatrix;
 }
 
+// 开始calibration
 Eigen::Matrix4d handEyeCalibrationStandalone(const std::vector<Eigen::Matrix4d>& handPoses, const std::vector<Eigen::Matrix4d>& eyePoses)
 {
     Eigen::Matrix4d calibrationMatrix = initialTransformGuess;
@@ -620,6 +621,7 @@ void transformFilter(const std::vector<Eigen::Matrix4d>& handPoses, const std::v
     double rotMean, transMean, rotStddev, transStddev;
     computeMeanVariance(rotErrors, rotMean, rotStddev);
     computeMeanVariance(transErrors, transMean, transStddev);
+    //算方差
     std::cout<<"rotMean: " << rotMean << " rotStddev: " << rotStddev << " transMean: "<< transMean << " transStddev: "<< transStddev << std::endl;
 
 //    double rt = rotMean+rotStddev;
@@ -850,7 +852,9 @@ std::vector<EigenHypothesis> generateHypotheses(const std::vector<Eigen::Matrix4
             }
            // indexShuffle.erase(indexShuffle.begin(), indexShuffle.begin()+sampleCount);
             // std:: cout <<"index shuffle: " << indexShuffle[0] << indexShuffle[1] << indexShuffle[2] <<std::endl;
-            hand2EyeTransform.mHypothesis = handEyeCalibrationStandalone(handPosesShuffle, eyePosesShuffle);
+            
+            hand2EyeTransform.mHypothesis = handEyeCalibrationStandalone(handPosesShuffle, eyePosesShuffle);// 重要！！！！！！
+
             // std::cout << "hand2EyeTransform.mHypothesis \n" << hand2EyeTransform.mHypothesis <<std::endl; 
             std::pair<double, std::vector<int>> evaluationResults = modelEvaluation(hand2EyeTransform.mHypothesis, handPoses, eyePoses, theta, t);
 
@@ -1033,6 +1037,9 @@ void removeOutliers(std::vector<Eigen::Matrix4d>& handPoses, std::vector<Eigen::
     std::vector<Eigen::Matrix4d> handRelativePoses;
     std::vector<Eigen::Matrix4d> eyeRelativePoses;
 
+    // 都计算了相对的旋转平移矩阵
+    // 但这意味着坐标系应该一样？才好分析？感觉应该要一致
+    // 所以前序工作还是要做的
     handRelativePoses = computeRelativeTransform(handPoses);
     eyeRelativePoses = computeRelativeTransform(eyePoses);
 
@@ -1090,7 +1097,7 @@ Eigen::Matrix4d computeTransformMatrixFromRT(double x, double y, double z, doubl
   return transform_matrix;
 }
 
-
+//正式开始干活了
 Eigen::Matrix4d imuLidarCalibration(const std::vector<Eigen::Matrix4d> &imuPoses,const std::vector<Eigen::Matrix4d> &lidarPoses, int roundCount, int hypothesesCount,
                                     int hypothesesSampleCount, int hypothesesMaxIters, double rotationThreshold, double translationThreshold, double hypothesesPercentage,
                                     int ransacSampleCount, int ransacPrunedCount)
@@ -1159,8 +1166,11 @@ int main(int argc, char** argv)
     ros::init(argc, argv, "handeye_example_node");
     ros::NodeHandle nh("~");
 
+    // 转换后的雷达路径
     ros::Publisher transformedLidarPathPublisher = nh.advertise<nav_msgs::Path>("/SensorCalibration/HandEye/TransformedLidarPath", 20);
+    // gps路径
     ros::Publisher gpsPathPublisher = nh.advertise<nav_msgs::Path>("/SensorCalibration/HandEye/GpsPath", 20);
+    // lidar路径
     ros::Publisher lidarPathPublisher = nh.advertise<nav_msgs::Path>("/SensorCalibration/HandEye/LidarPath", 20);
     ros::Publisher lidarInversePathPublisher = nh.advertise<nav_msgs::Path>("/SensorCalibration/HandEye/LidarInversePath", 20);
     nav_msgs::Path transformedLidarNavPath, gpsNavPath, lidarNavPath, lidarInverseNavPath;
@@ -1237,23 +1247,29 @@ int main(int argc, char** argv)
 
     std::cout << "----------------------Reading transformation pairs from the file----------------------" << std::endl;
     readTransformPairsFromFile(transformationPariFile);
+    //读入handPoses与eyePoses
     std::cout << "----------------------Data preprocessing----------------------" << std::endl;
 
 
     std::cout << "Before pruned data, hand size: " <<  handPoses.size() << "  eye size: "<< eyePoses.size() << std::endl;
+    // dataPercent 决定了选择size的大小
     std::vector<Eigen::Matrix4d> eyePosesPruned = pruneTransform(eyePoses,dataPercentage);
     std::vector<Eigen::Matrix4d> handPosesPruned = pruneTransform(handPoses,dataPercentage);
     std::cout << "After pruned data, hand size: " <<  handPosesPruned.size() << "  eye size: "<< eyePosesPruned.size() << std::endl;
+    // Pruned修剪 
 
     //remove outliers
     removeOutliers(handPosesPruned,eyePosesPruned);
     std::cout << "after remove outliers, eye size: " << handPosesPruned.size() <<" hand size: " << eyePosesPruned.size() << std::endl;
 
+    //算了一个相对的矩阵变换
+    // NOTE： 这里为什么要i=i+4啊
     std::vector<Eigen::Matrix4d> eyePosesNewOrigin = computeTransformFromNewOrigin(eyePosesPruned);
     std::vector<Eigen::Matrix4d> handPosesNewOrigin = computeTransformFromNewOrigin(handPosesPruned);
 
     std::cout << "new origin eye size: " << handPosesNewOrigin.size() <<" new origin hand size: " << eyePosesNewOrigin.size() << std::endl;
     // compute all relative transformations
+    
     std::vector<Eigen::Matrix4d> eyeRelativePoses = computeRelativeTransform(eyePosesNewOrigin);
     std::vector<Eigen::Matrix4d> handRelativePoses = computeRelativeTransform(handPosesNewOrigin);
     std::cout << "All relative pose count:" << eyeRelativePoses.size() << std::endl;

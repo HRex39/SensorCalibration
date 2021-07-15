@@ -12,7 +12,7 @@
     <!-- 1: dualQuaternionSolver -->
 <!--    <arg name="solverType" default="1" />-->
 
-    <arg name="roundCount" default="1" />
+    <arg name="roundCount" default="10" />
 
     <arg name="hypothesesCount" default="256" />
     <arg name="hypothesesSampleCount" default="10" />
@@ -46,7 +46,7 @@
 
         <param name="rotationThreshold" type="double" value="$(arg rotationThreshold)" />
         <param name="translationThreshold" type="double" value="$(arg translationThreshold)" />
-        <rosparam param="initialGuess"> [1.7, -1.4, -0.7, -0.01, -0.01, -0.005]</rosparam>
+        <rosparam param="initialGuess"> [0, 0, 0, 0, 0, 0]</rosparam>
     </node>
 
 <!--     <group if="$(arg useRviz)">

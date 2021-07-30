@@ -233,8 +233,8 @@ void poseLidarCallback(const geometry_msgs::PoseStampedConstPtr& poseMsg, const 
 
     // 取第一次imu的数据作为参考坐标系叫做referenceOdometry
     // trans是每一时刻imu相对于大地坐标系的旋转平移矩阵
-    // 这里的transPose感觉是lidar2到lidar1的变换
-    // 这里的transNewOrigin应该是imu1到imu2的变换,希望是根据车身坐标系的一个变换
+    // 这里的transPose是X^(-1) A X
+    // 这里的transNewOrigin应该是imu2到imu1的变换,希望是根据车身坐标系的一个变换
     // 考虑输入的应该是里程计的信息
 
     Eigen::Matrix4f transNewOrigin = referenceOdometry.inverse()*trans;
@@ -242,6 +242,7 @@ void poseLidarCallback(const geometry_msgs::PoseStampedConstPtr& poseMsg, const 
 
     // 这里的transPose只和你设置的initialTransformGuess相关
     // publish出来给你看看你的预估差了多少
+    // B = X^(-1) A X
 
     Eigen::Matrix4d transPose = initialTransformGuess.inverse()* transNewOrigin.cast<double>() * initialTransformGuess;
     ros::Time bp2 = ros::Time::now();
@@ -313,7 +314,8 @@ void poseLidarCallback(const geometry_msgs::PoseStampedConstPtr& poseMsg, const 
     pointCloudTrackerSingle(previousCloudPtr, currentCloudPtr, transformation, initialGuess, mode);
     //assume planar motion, set z value always 0
     transformation(2,3) = 0.0;
-    std::cout << "transformation: \n " <<transformation <<std::endl;
+    std::cout << "transformation B: \n " <<transformation <<std::endl;
+    // 在lidar_link下的transformed_pclMessage
     pcl::transformPointCloud(*currentCloudPtr, transformed_pclMessage, transformation);
 
     tf::Matrix3x3 mat_l;
@@ -323,7 +325,7 @@ void poseLidarCallback(const geometry_msgs::PoseStampedConstPtr& poseMsg, const 
                  static_cast<double>(transformation(1, 1)), static_cast<double>(transformation(1, 2)),
                  static_cast<double>(transformation(2, 0)), static_cast<double>(transformation(2, 1)),
                  static_cast<double>(transformation(2, 2)));
-  // Update localizer_pose.
+    // Update localizer_pose.
     current_pose.x = transformation(0, 3);
     current_pose.y = transformation(1, 3);
     current_pose.z = transformation(2, 3);
@@ -356,6 +358,8 @@ void poseLidarCallback(const geometry_msgs::PoseStampedConstPtr& poseMsg, const 
         if(mode == "ndt"){
             previousPointCloud += transformed_pclMessage;
             absolutePose = transformation.cast<double>();
+            // save to pcd file
+            //pcl::io::savePCDFileASCII ("/home/neousys/test_pcd.pcd", previousPointCloud);
         }
         else if(mode == "gicp" or mode =="icp"){
             previousPointCloud = currentCloudDownSampled;
@@ -372,8 +376,8 @@ void poseLidarCallback(const geometry_msgs::PoseStampedConstPtr& poseMsg, const 
     sensor_msgs::PointCloud2 sourcePclMsg;
     pcl::toROSMsg(pclMessage,sourcePclMsg);
     pcl::toROSMsg(previousPointCloud,targetPclMsg);
-    targetPclMsg.header.frame_id = "/imu_link";
-    sourcePclMsg.header.frame_id = "/imu_link";
+    targetPclMsg.header.frame_id = "/lidar_link";
+    sourcePclMsg.header.frame_id = "/lidar_link";
     targetPclMsg.header.stamp = ros::Time::now();
     sourcePclMsg.header.stamp = ros::Time::now();
     targetPcPublisher.publish(targetPclMsg);
@@ -407,20 +411,21 @@ void poseLidarCallback(const geometry_msgs::PoseStampedConstPtr& poseMsg, const 
     //publish
     //std::cout<<"transPose:"<<std::endl;
     // 为什么要用transPose
-    std::cout << transPose <<std::endl;
+    std::cout << "X^(-1) A X : \n" << transPose <<std::endl;
     // transPose和第一次的init值是一致的
+    // Eigen::Matrix4d transPose = initialTransformGuess.inverse()* transNewOrigin.cast<double>() * initialTransformGuess;
     currentGpsPoseStampedMsg = constructPoseStampedFromEigenMatrix(transPose);
     // absolutePose和算出来的ndt矩阵是一致的
     // 我应该输出的是pclPoseStamped和我目前的车辆信息的这个posestampted的Path
     // 这两个应该才是A和B（AX = XB）
     currentPclPoseStampedMsg = constructPoseStampedFromEigenMatrix(absolutePose);
-    currentGpsPoseStampedMsg.header.frame_id = "/imu_link";
-    currentPclPoseStampedMsg.header.frame_id = "/imu_link";
+    currentGpsPoseStampedMsg.header.frame_id = "/lidar_link";
+    currentPclPoseStampedMsg.header.frame_id = "/lidar_link";
     currentGpsPoseStampedMsg.header.stamp = current_pose_time;
     currentPclPoseStampedMsg.header.stamp = current_scan_time;
 
-    currentGpsNavPathMsg.header.frame_id = "/imu_link";
-    currentPclNavPathMsg.header.frame_id = "/imu_link";
+    currentGpsNavPathMsg.header.frame_id = "/lidar_link";
+    currentPclNavPathMsg.header.frame_id = "/lidar_link";
     currentGpsNavPathMsg.header.stamp = current_pose_time;
     currentPclNavPathMsg.header.stamp = current_scan_time;
     currentGpsNavPathMsg.poses.push_back(currentGpsPoseStampedMsg);

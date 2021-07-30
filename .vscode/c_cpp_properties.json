@@ -1,0 +1,22 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "",
+        "limitSymbolsToIncludedHeaders": true
+      },
+      "includePath": [
+        "/opt/ros/melodic/include/**",
+        "/home/neousys/Desktop/handeye_lidar_imu/src/SensorCalibration/imu-lidar/include/**",
+        "/home/neousys/Desktop/handeye_lidar_imu/src/SensorCalibration/lidar_align/include/**",
+        "/home/neousys/Desktop/handeye_lidar_imu/src/SensorCalibration/localization/include/**",
+        "/home/neousys/Desktop/handeye_lidar_imu/src/SensorCalibration/ndt_tku/include/**",
+        "/home/neousys/Desktop/handeye_lidar_imu/src/SensorCalibration/velodyne_compensation/include/**",
+        "/home/neousys/Desktop/handeye_lidar_imu/src/SensorCalibration/wgs_conversions/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS"
+    }
+  ],
+  "version": 4
+}

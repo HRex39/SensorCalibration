@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+  <param name="use_sim_time" value="true"/>
+  <node pkg="tf2_ros" 
+        type="static_transform_publisher" 
+        name="rightlidar_to_imu" 
+        args="6.58865 -1.44223 0 -0.94986 0.00335925 0.0106973 /base_link /right_rslidar" />
+  <node pkg="tf2_ros" 
+        type="static_transform_publisher" 
+        name="leftlidar_to_imu" 
+        args="6.51636 1.59876 0 0.919971 0.0610738 -0.03206 /base_link /left_rslidar" />
+  <!-- <node pkg="tf2_ros" type="static_transform_publisher" name="left_to_right" args="-1.88563    1.50337 -0.0994447    1.78081  0.0651326 -0.0517497 /right_rslidar /left_rslidar" /> -->
+</launch>

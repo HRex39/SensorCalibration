@@ -17,10 +17,10 @@
     <arg name="hypothesesCount" default="256" />
     <arg name="hypothesesSampleCount" default="10" />
     <arg name="hypothesesMaxIters" default="256" />
-    <arg name="hypothesesPercentage" default="0.6" />
+    <arg name="hypothesesPercentage" default="0.1" />
 
-    <arg name="ransacSampleCount" default="60" />
-    <arg name="ransacPrunedCount" default="64" />
+    <arg name="ransacSampleCount" default="64" />
+    <arg name="ransacPrunedCount" default="60" />
 
     <arg name="rotationThreshold" default="4.0" />
     <arg name="translationThreshold" default="0.4" />
@@ -46,11 +46,12 @@
 
         <param name="rotationThreshold" type="double" value="$(arg rotationThreshold)" />
         <param name="translationThreshold" type="double" value="$(arg translationThreshold)" />
-        <rosparam param="initialGuess"> [0, 0, 0, 0, 0, 0]</rosparam>
+        <!-- xyzypr -->
+        <rosparam param="initialGuess"> [6, 1.13, 0.0, 0.78, 0.0, 0.0]</rosparam>
     </node>
 
 <!--     <group if="$(arg useRviz)">
         <node pkg="rviz" type="rviz" name="rviz" args="-d $(find sensor_calibration)/config/lidar_Imu.rviz"/>
     </group> -->
-
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find imu-lidar)/launch/handeye.rviz"/>
 </launch>
